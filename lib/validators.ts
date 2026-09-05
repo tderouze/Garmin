@@ -1,0 +1,42 @@
+import { z } from 'zod';
+
+export const garminConnectSchema = z.object({
+  email: z.string().email(),
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
+
+export const syncBackfillSchema = z.object({
+  userId: z.string().cuid(),
+  start: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(100).default(100),
+});
+
+export const syncIncrementalSchema = z.object({
+  userId: z.string().cuid(),
+});
+
+export const activitiesQuerySchema = z.object({
+  type: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+export const importFileSchema = z.object({
+  userId: z.string().cuid(),
+});
+
+export const paginationSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const activityFilterSchema = z.object({
+  type: z.string().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  distanceMin: z.coerce.number().min(0).optional(),
+  distanceMax: z.coerce.number().min(0).optional(),
+});
