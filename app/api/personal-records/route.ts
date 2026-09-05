@@ -42,8 +42,16 @@ export async function GET(req: NextRequest) {
     const { isDbUnavailableError } = await import("@/lib/errors");
     if (isDbUnavailableError(e)) {
       // Spec section 9: DB indisponible → 503 with Retry-After
-      // For build/CI without DATABASE_URL, keep graceful empty to not break static generation
-      if (msg.includes("DATABASE_URL")) return NextResponse.json([]);
+      // For build/CI without DATABASE_URL, keep graceful empty only in non-production to not break static generation
+      if (msg.includes("DATABASE_URL")) {
+        if (process.env.NODE_ENV === "production") {
+          return NextResponse.json(
+            { error: "Service temporarily unavailable — database unreachable. Please retry." },
+            { status: 503, headers: { "Retry-After": "30" } }
+          );
+        }
+        return NextResponse.json([]);
+      }
       return NextResponse.json(
         { error: "Service temporarily unavailable — database unreachable. Please retry." },
         { status: 503, headers: { "Retry-After": "30" } }

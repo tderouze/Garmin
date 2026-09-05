@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { test, expect } from "@playwright/test";
 
 test("map page loads and shows selection", async ({ page }) => {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { test, expect } from "@playwright/test";
 
 test("compare page loads with filters and progression", async ({ page }) => {

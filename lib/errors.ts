@@ -17,12 +17,12 @@ export function isDbUnavailableError(err: unknown): boolean {
     lower.includes("cant reach database") ||
     lower.includes("connect etimedout") ||
     lower.includes("connect econnrefused") ||
-    lower.includes("database_url") && lower.includes("not found") ||
+    (lower.includes("database_url") && lower.includes("not found")) ||
     lower.includes("08006") ||
-    lower.includes("connection") && lower.includes("refused") ||
+    (lower.includes("connection") && lower.includes("refused")) ||
     lower.includes("getaddrinfo") ||
     lower.includes("enotfound") ||
-    lower.includes("prisma") && lower.includes("can't reach")
+    (lower.includes("prisma") && lower.includes("can't reach"))
   );
 }
 
