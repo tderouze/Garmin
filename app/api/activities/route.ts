@@ -46,12 +46,22 @@ export async function GET(req: NextRequest) {
   const take = limit ?? 50;
   const skip = offset ?? 0;
 
-  const activities = await prisma.activity.findMany({
-    where,
-    orderBy: { date: "desc" },
-    take,
-    skip,
-  });
-
-  return NextResponse.json(activities);
+  try {
+    const activities = await prisma.activity.findMany({
+      where,
+      orderBy: { date: "desc" },
+      take,
+      skip,
+    });
+    return NextResponse.json(activities);
+  } catch (e: unknown) {
+    const { isDbUnavailableError } = await import("@/lib/errors");
+    if (isDbUnavailableError(e)) {
+      return NextResponse.json(
+        { error: "Service temporarily unavailable — database unreachable. Please retry." },
+        { status: 503, headers: { "Retry-After": "30" } }
+      );
+    }
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
 }

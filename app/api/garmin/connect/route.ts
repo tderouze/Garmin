@@ -25,10 +25,19 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ userId: user.id });
-  } catch (err: any) {
-    // Avoid leaking tokens
-    const message = err.message ?? "Failed to connect Garmin";
+  } catch (err: unknown) {
+    // Avoid leaking tokens — never return tokens or passwords in error body
+    const message = err instanceof Error ? err.message : String(err ?? "Failed to connect Garmin");
+    if (message.toLowerCase().includes("rate limit") || message.includes("429")) {
+      return NextResponse.json({ error: "Garmin rate limited — retry after backoff", detail: "429" }, { status: 429, headers: { "Retry-After": "60" } });
+    }
+    const { isDbUnavailableError } = await import("@/lib/errors");
+    if (isDbUnavailableError(err)) {
+      return NextResponse.json({ error: "Database unavailable — please retry" }, { status: 503, headers: { "Retry-After": "30" } });
+    }
     const status = message.includes("Not implemented") ? 501 : 500;
-    return NextResponse.json({ error: message }, { status });
+    // Strip any token-like substrings from message before returning
+    const safeMessage = message.replace(/oauth[^\s]*/gi, "[redacted]");
+    return NextResponse.json({ error: safeMessage }, { status });
   }
 }

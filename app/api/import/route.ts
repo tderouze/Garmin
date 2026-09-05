@@ -140,10 +140,18 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ activityId: activity.id, activity }, { status: 201 });
-  } catch (err: any) {
-    const msg = err?.message ?? "Import failed";
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err ?? "Import failed");
     if (isClientParseError(msg)) {
       return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    const { isDbUnavailableError, isUniqueConstraintError } = await import("@/lib/errors");
+    if (isDbUnavailableError(err)) {
+      return NextResponse.json({ error: "Database unavailable — please retry", detail: msg.slice(0, 500) }, { status: 503, headers: { "Retry-After": "30" } });
+    }
+    if (isUniqueConstraintError(err) || msg.includes("409") || msg.toLowerCase().includes("duplicate")) {
+      // Already handled above as 409, but catch race after dedup check
+      return NextResponse.json({ error: "Duplicate activity" }, { status: 409 });
     }
     return NextResponse.json({ error: msg }, { status: 500 });
   }

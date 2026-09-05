@@ -37,15 +37,18 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(serialised);
   } catch (e: unknown) {
-    // If DB unreachable (e.g. no DATABASE_URL in dev/CI), return empty list rather than 500 to keep UI usable
     const msg = e instanceof Error ? e.message : String(e);
-    // Log server-side for observability; don't expose tokens
     console.error("[personal-records] fetch failed:", msg);
-    // Gracefully degrade: try to return empty instead of 503 during local dev without DB
-    // If the error is clearly a DB connection issue, return empty; otherwise 500
-    if (msg.includes("DATABASE_URL") || msg.includes("Can't reach") || msg.includes("connect")) {
-      return NextResponse.json([]);
+    const { isDbUnavailableError } = await import("@/lib/errors");
+    if (isDbUnavailableError(e)) {
+      // Spec section 9: DB indisponible → 503 with Retry-After
+      // For build/CI without DATABASE_URL, keep graceful empty to not break static generation
+      if (msg.includes("DATABASE_URL")) return NextResponse.json([]);
+      return NextResponse.json(
+        { error: "Service temporarily unavailable — database unreachable. Please retry." },
+        { status: 503, headers: { "Retry-After": "30" } }
+      );
     }
-    return NextResponse.json({ error: "Failed to compute personal records", detail: msg }, { status: 500 });
+    return NextResponse.json({ error: "Failed to compute personal records", detail: msg.slice(0, 500) }, { status: 500 });
   }
 }
