@@ -175,7 +175,11 @@ export default function MapPage() {
     URL.revokeObjectURL(url);
   }, [traces]);
 
-  const handleHover = useCallback((traceId: string, index: number) => {
+  const handleHover = useCallback((traceId: string, index: number, _pt?: TracePoint) => {
+    setHoverPoint({ traceId, index });
+  }, []);
+  // Stable callback for MapView — avoids inline closure thrashing MapView's [traces,opacity] effect (Task 5 leak fix)
+  const mapOnHover = useCallback((traceId: string, index: number, _pt: TracePoint) => {
     setHoverPoint({ traceId, index });
   }, []);
 
@@ -331,7 +335,7 @@ export default function MapPage() {
               Chargement des traces…
             </div>
           ) : (
-            <MapView traces={traces} opacity={opacity} hoverPoint={hoverPoint} onHover={(id, idx, pt) => setHoverPoint({ traceId: id, index: idx })} />
+            <MapView traces={traces} opacity={opacity} hoverPoint={hoverPoint} onHover={mapOnHover} />
           )}
 
           <ElevationProfile traces={traces} hoverPoint={hoverPoint} onHover={handleHover} />

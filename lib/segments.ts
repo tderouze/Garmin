@@ -1,3 +1,8 @@
+// NOTE (Task 5 quick win): This file uses many Turf helpers (lineString, buffer,
+// intersect, booleanIntersects, pointToLineDistance, etc.). Per-module imports
+// (e.g. "@turf/distance", "@turf/buffer") would reduce bundle size but require
+// touching many call sites; left as barrel import for now — ElevationProfile
+// already demonstrates the pattern with "@turf/distance".
 import * as turf from "@turf/turf";
 import type { Feature, LineString, Polygon } from "geojson";
 

@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
-import * as turf from "@turf/turf";
+// Per-module import (Task 5 quick win): avoids pulling full @turf/turf (~150kB) for just distance
+import { distance } from "@turf/distance";
 import type { Trace, TracePoint } from "./MapView";
 
 export interface ElevationProfileProps {
@@ -24,7 +25,7 @@ function cumulativeDistKm(points: TracePoint[]): number[] {
       continue;
     }
     try {
-      const d = turf.distance([a.lng, a.lat], [b.lng, b.lat], { units: "kilometers" });
+      const d = distance([a.lng, a.lat], [b.lng, b.lat], { units: "kilometers" });
       total += d;
     } catch {
       // ignore

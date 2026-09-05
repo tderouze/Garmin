@@ -56,6 +56,18 @@ export function MapView({ traces, onHover, hoverPoint, opacity = 0.8 }: MapViewP
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const onHoverRef = useRef<MapViewProps["onHover"]>(onHover);
+  const tracesRef = useRef<Trace[]>(traces);
+  const listenersRef = useRef<
+    Map<string, { mouseenter: () => void; mouseleave: () => void; click: (e: maplibregl.MapLayerMouseEvent) => void }>
+  >(new Map());
+
+  useEffect(() => {
+    onHoverRef.current = onHover;
+  }, [onHover]);
+  useEffect(() => {
+    tracesRef.current = traces;
+  }, [traces]);
 
   // Create map once
   useEffect(() => {
@@ -87,6 +99,9 @@ export function MapView({ traces, onHover, hoverPoint, opacity = 0.8 }: MapViewP
   }, []);
 
   // Sync traces -> sources/layers + fitBounds
+  // onHover is read via onHoverRef to avoid thrashing the effect when the
+  // parent recreates the closure; opacity/traces are the only deps that need
+  // to re-run the sync. Listener cleanup uses map.off on removal (leak fix).
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -101,6 +116,26 @@ export function MapView({ traces, onHover, hoverPoint, opacity = 0.8 }: MapViewP
           if (lyr.id.startsWith("trace-")) {
             const id = lyr.id.replace(/^trace-/, "");
             if (!existingIds.has(id)) {
+              // cleanup listeners before removing layer
+              const handlers = listenersRef.current.get(lyr.id);
+              if (handlers) {
+                try {
+                  map.off("mouseenter", lyr.id, handlers.mouseenter);
+                } catch {
+                  // ignore
+                }
+                try {
+                  map.off("mouseleave", lyr.id, handlers.mouseleave);
+                } catch {
+                  // ignore
+                }
+                try {
+                  map.off("click", lyr.id, handlers.click);
+                } catch {
+                  // ignore
+                }
+                listenersRef.current.delete(lyr.id);
+              }
               try {
                 if (map.getLayer(lyr.id)) map.removeLayer(lyr.id);
               } catch {
@@ -173,28 +208,35 @@ export function MapView({ traces, onHover, hoverPoint, opacity = 0.8 }: MapViewP
           });
 
           // Hover interaction: query nearest point on click/mousemove
-          // Add mousemove handler per trace via layer events after creation
-          map.on("mouseenter", layerId, () => {
+          // Store handlers so we can map.off on stale-layer cleanup / effect cleanup
+          const onEnter = () => {
             map.getCanvas().style.cursor = "pointer";
-          });
-          map.on("mouseleave", layerId, () => {
+          };
+          const onLeave = () => {
             map.getCanvas().style.cursor = "";
-          });
-          map.on("click", layerId, (e: maplibregl.MapLayerMouseEvent) => {
-            if (!onHover || !e.lngLat) return;
-            // find nearest point index on this trace
+          };
+          const onClick = (e: maplibregl.MapLayerMouseEvent) => {
+            const cb = onHoverRef.current;
+            if (!cb || !e.lngLat) return;
+            // Use tracesRef to avoid stale closure over trace.points if trace mutated
+            const curTraces = tracesRef.current;
+            const curTrace = curTraces.find((t) => t.id === trace.id) ?? trace;
             let bestIdx = 0;
             let bestDist = Infinity;
-            for (let idx = 0; idx < trace.points.length; idx++) {
-              const p = trace.points[idx];
+            for (let idx = 0; idx < curTrace.points.length; idx++) {
+              const p = curTrace.points[idx];
               const d = Math.hypot(p.lng - e.lngLat.lng, p.lat - e.lngLat.lat);
               if (d < bestDist) {
                 bestDist = d;
                 bestIdx = idx;
               }
             }
-            onHover(trace.id, bestIdx, trace.points[bestIdx]);
-          });
+            cb(curTrace.id, bestIdx, curTrace.points[bestIdx]);
+          };
+          listenersRef.current.set(layerId, { mouseenter: onEnter, mouseleave: onLeave, click: onClick });
+          map.on("mouseenter", layerId, onEnter);
+          map.on("mouseleave", layerId, onLeave);
+          map.on("click", layerId, onClick);
         }
       }
 
@@ -246,7 +288,30 @@ export function MapView({ traces, onHover, hoverPoint, opacity = 0.8 }: MapViewP
         if (map.isStyleLoaded()) update();
       });
     }
-  }, [traces, opacity, onHover]);
+
+    return () => {
+      const m = mapRef.current;
+      if (!m) return;
+      for (const [layerId, handlers] of listenersRef.current) {
+        try {
+          m.off("mouseenter", layerId, handlers.mouseenter);
+        } catch {
+          // ignore
+        }
+        try {
+          m.off("mouseleave", layerId, handlers.mouseleave);
+        } catch {
+          // ignore
+        }
+        try {
+          m.off("click", layerId, handlers.click);
+        } catch {
+          // ignore
+        }
+      }
+      listenersRef.current.clear();
+    };
+  }, [traces, opacity]);
 
   // Hover marker synchronized from ElevationProfile
   useEffect(() => {
