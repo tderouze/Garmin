@@ -3,8 +3,13 @@ import { GarminClient } from "@/lib/garmin/client";
 import { encrypt } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { garminConnectSchema } from "@/lib/validators";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
+  const rl = checkRateLimit(req, 10, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(rl.retryAfter ?? 60) } });
+  }
   try {
     const body = await req.json();
     const parsed = garminConnectSchema.safeParse(body);

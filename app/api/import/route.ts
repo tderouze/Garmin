@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { parseFIT, parseGPX, parseTCX } from "@/lib/fit/parser";
 import { computeAvgPace } from "@/lib/fit/normalize";
 import { importFileSchema } from "@/lib/validators";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB
 
@@ -11,6 +12,10 @@ function isClientParseError(message: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  const rl = checkRateLimit(req, 10, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(rl.retryAfter ?? 60) } });
+  }
   try {
     const form = await req.formData();
     const file = form.get("file") as File | null;

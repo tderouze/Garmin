@@ -3,10 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { backfillBatch } from "@/lib/garmin/sync";
 import { syncIncrementalSchema } from "@/lib/validators";
 import { isDbUnavailableError, isRateLimitError } from "@/lib/errors";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const rl = checkRateLimit(req, 10, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(rl.retryAfter ?? 60) } });
+  }
   try {
     const body = await req.json();
     const parsed = syncIncrementalSchema.safeParse(body);

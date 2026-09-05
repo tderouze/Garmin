@@ -39,8 +39,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Optional userId filter via header/query — for V1 we return all if no auth
-  const userId = searchParams.get("userId");
+  // TODO(auth): NextAuth deferred for V1 (single-user/perso). When auth is added,
+  // replace userId query-param fallback with session.user.id and remove open query access.
+  // For V1 we require userId or fall back to the single/first user — never return all users open-access.
+  let userId = searchParams.get("userId");
+  if (!userId) {
+    try {
+      const firstUser = await prisma.user.findFirst({ select: { id: true } });
+      if (firstUser) userId = firstUser.id;
+      // If no user exists yet, where remains unfiltered but will return empty set.
+    } catch {
+      // If DB unreachable, leave userId null — handler will 503 below
+    }
+  }
   if (userId) where.userId = userId;
 
   const take = limit ?? 50;
