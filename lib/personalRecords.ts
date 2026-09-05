@@ -56,7 +56,7 @@ export function getCanonicalDistance(distance: number): CanonicalDistance | null
   let bestDiff = Infinity;
   for (const d of CANONICAL_DISTANCES) {
     const diff = Math.abs(distance - d) / d;
-    if (diff < 0.02) {
+    if (diff <= 0.02) {
       if (diff < bestDiff) {
         bestDiff = diff;
         best = d as CanonicalDistance;
