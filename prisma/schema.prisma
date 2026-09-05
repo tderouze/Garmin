@@ -34,6 +34,7 @@ model Activity {
   avgCadence     Float?
   avgPower       Float?
   calories       Int?
+  tss            Float?
   hasGps         Boolean         @default(true)
   fileUrl        String?
   trackPoints     TrackPoint[]
@@ -70,6 +71,7 @@ model Lap {
   duration   Int
   avgPace    Float?
   avgHR      Int?
+  avgCadence Float?
 }
 
 model Segment {
