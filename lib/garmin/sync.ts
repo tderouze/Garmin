@@ -30,7 +30,8 @@ function toDate(raw: any, fallback: Date): Date {
 export async function backfillBatch(
   userId: string,
   start: number,
-  limit: number
+  limit: number,
+  opts?: { fromDate?: Date | null }
 ): Promise<{ imported: number; skipped: number; errors: number; total: number }> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error("User not found");
@@ -64,6 +65,15 @@ export async function backfillBatch(
       });
       throw e;
     }
+  }
+
+  // If fromDate provided, filter to only activities newer than fromDate (spec: incremental since lastSyncAt)
+  const fromDate = opts?.fromDate ?? null;
+  if (fromDate) {
+    activities = activities.filter((raw) => {
+      const d = toDate(raw, new Date(0));
+      return d.getTime() > fromDate.getTime();
+    });
   }
 
   const existingRows = await prisma.activity.findMany({
@@ -213,6 +223,14 @@ export async function backfillBatch(
       imported++;
     } catch (e: any) {
       const msg = e?.message ?? String(e);
+      // Handle P2002 unique constraint (race/dedup) — count as skipped, not error
+      const isUniqueConstraint =
+        e?.code === "P2002" || msg.includes("P2002") || msg.includes("Unique constraint");
+      if (isUniqueConstraint) {
+        skipped++;
+        existingSet.add(garminId);
+        continue;
+      }
       // Handle 429 backoff caught above already; generic error: record SyncError and continue
       if (msg.includes("429")) {
         await sleep(1500);

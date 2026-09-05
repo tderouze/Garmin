@@ -18,8 +18,14 @@ export const syncIncrementalSchema = z.object({
 
 export const activitiesQuerySchema = z.object({
   type: z.string().optional(),
-  from: z.string().optional(),
-  to: z.string().optional(),
+  from: z
+    .string()
+    .optional()
+    .refine((v) => !v || !isNaN(Date.parse(v)), { message: "Invalid 'from' date" }),
+  to: z
+    .string()
+    .optional()
+    .refine((v) => !v || !isNaN(Date.parse(v)), { message: "Invalid 'to' date" }),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });

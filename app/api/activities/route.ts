@@ -25,13 +25,18 @@ export async function GET(req: NextRequest) {
     where.date = {};
     if (from) {
       const d = new Date(from);
-      if (!isNaN(d.getTime())) where.date.gte = d;
+      if (isNaN(d.getTime())) {
+        return NextResponse.json({ error: "Invalid 'from' date" }, { status: 400 });
+      }
+      where.date.gte = d;
     }
     if (to) {
       const d = new Date(to);
-      if (!isNaN(d.getTime())) where.date.lte = d;
+      if (isNaN(d.getTime())) {
+        return NextResponse.json({ error: "Invalid 'to' date" }, { status: 400 });
+      }
+      where.date.lte = d;
     }
-    if (Object.keys(where.date).length === 0) delete where.date;
   }
 
   // Optional userId filter via header/query — for V1 we return all if no auth

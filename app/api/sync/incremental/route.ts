@@ -21,11 +21,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Incremental: fetch latest activities since lastSyncAt.
-    // We paginate from start=0; backfillBatch already handles dedup via garminId.
-    // If lastSyncAt exists, we could stop when activities older than lastSyncAt,
-    // but for V1 we fetch one batch (20) which covers the incremental window.
+    // Filter to only activities with date > lastSyncAt per spec.
     const limit = 20;
-    const result = await backfillBatch(userId, 0, limit);
+    const result = await backfillBatch(userId, 0, limit, {
+      fromDate: user.lastSyncAt ?? null,
+    });
 
     return NextResponse.json({
       ...result,
