@@ -2,11 +2,12 @@
 
 Web app perso pour analyser tes activités Garmin — course à pied en priorité : superposition de traces sur carte, comparatif de performances et évaluation des courses (PBs).
 
-> Stack : **Next.js 14 + TypeScript + Prisma + Postgres** · Cartes **MapLibre GL (OSM)** · Graphs **ECharts** · Parsing FIT/GPX · Sync via lib non-officielle Garmin
+> Stack : **Next.js 14 + TypeScript + Prisma + Postgres** · Cartes **MapLibre GL (OSM)** · Graphs **ECharts** · Parsing FIT/GPX · Sync via `garmin-connect@1.6.2`
 
 ## Fonctionnalités
 
-- **Import historique** : backfill paginé Garmin (lib `garth/garminconnect` via `lib/garmin/*`) + upload manuel FIT/GPX/TCX (`/import` drag & drop, déduplication sur `garminId` + fenêtre 5 min / 1%)
+- **Connexion Garmin** (`/settings`) : login/mdp → `POST /api/garmin/connect` (tokens `oauth1`/`oauth2` chiffrés AES-256-GCM via `lib/crypto.ts`, branchement réel `garmin-connect` dans `lib/garmin/client.ts:14`), puis sync
+- **Import historique** : backfill paginé Garmin (`GarminConnect.getActivities` → `downloadFIT` via `lib/garmin/sync.ts:backfillBatch`, 100/batch, 500 ms, backoff 429, `SyncError`/`P2002` skip) + upload manuel FIT/GPX/TCX (`/import` drag & drop, déduplication sur `garminId` + fenêtre 5 min / 1%)
 - **Liste & dashboard** (`/`) : filtres type/date/distance, stats volume
 - **Carte** (`/map`) : sélection 2–10 activités, polylines colorées MapLibre, profil d'élévation ECharts synchro (hover carte ↔ profil), détection segments partagés (Turf.js), export GPX, réglages opacité/tolérance
 - **Comparaison** (`/compare`) : période 7j/30j/90j/1an/tout ou sélection manuelle, graphs allure/FC/cadence/puissance/élévation (axe allure inversé, crosshair synchro), tableau récap, courbe progression + volume hebdo + VMA estimée, lissage & normalisation distance
@@ -15,7 +16,7 @@ Web app perso pour analyser tes activités Garmin — course à pied en priorit�
 
 ## Stack
 
-`next 14.2` · `prisma 5.22` · `postgres` (Supabase/Neon ou Docker) · `maplibre-gl` · `echarts` + `echarts-for-react` · `@turf/turf` · `fit-file-parser` · `gpx-parser-builder` · `zod` · `vitest` · `@playwright/test`
+`next 14.2` · `prisma 5.22` · `postgres` (Supabase/Neon ou Docker/LXC Proxmox) · `garmin-connect@1.6.2` · `maplibre-gl` · `echarts` + `echarts-for-react` · `@turf/turf` · `fit-file-parser` · `gpx-parser-builder` · `zod` · `vitest` · `@playwright/test`
 
 ## Prérequis
 
@@ -53,6 +54,14 @@ npx prisma migrate dev --name init   # crée les tables
 # 6. Lancer
 npm run dev
 # ouvre http://localhost:3000
+
+# 7. Connecter Garmin (première fois, sinon tu restes à 0 activités)
+# Va sur http://localhost:3000/settings
+# - Email local : ton email perso (ex: thi.derouze@gmail.com) — c'est le User.email en DB
+# - Username + Password : ton compte connect.garmin.com
+# - Clique "Se connecter à Garmin" → POST /api/garmin/connect (501 si MFA/locked, voir Dépannage)
+# - Puis "Backfill 100" (clique plusieurs fois pour tout l'historique : 0→100→200…)
+# - Alternative sans Garmin : importe des .FIT via http://localhost:3000/import
 ```
 
 Autres commandes :
@@ -88,6 +97,8 @@ MAPBOX_TOKEN=""  # optionnel — MapLibre + tuiles OSM par défaut
 
 Schéma : `prisma/schema.prisma` — 8 modèles (`User`, `Activity`, `TrackPoint`, `Lap`, `Segment`, `SegmentEffort`, `PersonalRecord`, `SyncError`) + indexes `[userId, date]`, `[userId, type]`, unique `garminId`.
 
+> **LXC Proxmox** (`192.168.1.41` / `db.derouze.ovh`) déjà supporté : mets `DATABASE_URL="postgresql://garmin:***@192.168.1.41:5432/garmin?schema=public"` (local) ou `db.derouze.ovh` (prod via port-forward/VPN) — voir `.env.example:1`. Le LXC doit avoir `listen_addresses='*'` + `pg_hba.conf` `host all all 192.168.1.0/24 scram-sha-256`.
+
 Migrations :
 
 ```bash
@@ -103,14 +114,15 @@ Prisma Client singleton : `lib/prisma.ts`.
 | Page | Description |
 |------|-------------|
 | `/` | Dashboard — stats, `ActivityList` + `ActivityFilters` |
+| `/settings` | **Connecter Garmin** — form login/mdp + `Backfill 100` / `Sync incrémental` (tokens chiffrés, `lib/garmin/client.ts` + `garmin-connect`) |
 | `/map` | Superposition traces MapLibre + `ElevationProfile` + `lib/segments.ts` |
 | `/compare` | Comparatif ECharts (`CompareCharts`, `lib/calculations.ts`) |
 | `/races` | PBs + liste courses (`lib/personalRecords.ts`, `PersonalRecords`) |
-| `/import` | Drag & drop FIT/GPX/TCX → `POST /api/import` |
+| `/import` | Drag & drop FIT/GPX/TCX → `POST /api/import` (fallback si Garmin casse) |
 
 | API | Méthode | Notes |
 |-----|---------|-------|
-| `/api/garmin/connect` | POST `{email, username, password}` | `GarminClient.login` → `encrypt` → `prisma.user.upsert` |
+| `/api/garmin/connect` | POST `{email, username, password}` | `GarminConnect.login` (SSO Garmin, `garmin-connect@1.6.2`) → `exportToken {oauth1,oauth2}` → `encrypt` → `prisma.user.upsert` · `runtime nodejs` · 501 si MFA/locked |
 | `/api/sync/backfill` | POST `{userId, start, limit}` | `backfillBatch` paginé 100, 500 ms entre FIT, backoff 429, `SyncError` + `P2002` skip |
 | `/api/sync/incremental` | POST `{userId}` | depuis `lastSyncAt` (`fromDate`) |
 | `/api/cron/sync` | GET | Vercel Cron `0 6 * * *`, `CRON_SECRET`, `maxDuration 60` |
@@ -134,6 +146,11 @@ Libs isolées : `lib/garmin/*` (wrapper Garmin), `lib/fit/*` (parsing/normalisat
 
 ## Dépannage
 
+- **Dashboard à 0 activités au premier lancement** : normal — va sur `/settings`, connecte Garmin puis `Backfill 100` (ou importe via `/import`)
+- **`/api/garmin/connect` 501 `Not implemented`** : ancien stub — `git pull` (corrigé en `9a6e0f2`, maintenant `garmin-connect` réel)
+- **MFA / 2FA Garmin** : `garmin-connect` ne gère pas le MFA → désactive temporairement le 2FA sur connect.garmin.com ou utilise un mot de passe d'app
+- **Compte verrouillé** : vérifie sur connect.garmin.com, puis retente
+- **Garmin SSO change** : lib non-officielle → fallback import manuel FIT
 - **`.env` non chargé en tests** : `vitest.config.ts` fait `process.loadEnvFile()` ; sinon lance avec `GARMIN_TOKEN_KEY=… npx vitest run`
 - **`P2002` unique `garminId`** : normal — import/sync concurrent → `skipped`, pas une erreur
 - **`FIT corrompu / Invalid GPX`** → 400 (client), pas 500 ; voir `SyncError` table
