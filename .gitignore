@@ -7,3 +7,5 @@ dist
 coverage
 .vercel
 *.tsbuildinfo
+.superpowers/
+next-env.d.ts

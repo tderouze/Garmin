@@ -4,6 +4,7 @@ import { syncBackfillSchema } from "@/lib/validators";
 import { isDbUnavailableError, isRateLimitError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/ratelimit";
 
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {

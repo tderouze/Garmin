@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { garminConnectSchema } from "@/lib/validators";
 import { checkRateLimit } from "@/lib/ratelimit";
 
+export const runtime = "nodejs";
+
 export async function POST(req: NextRequest) {
   const rl = checkRateLimit(req, 10, 60_000);
   if (!rl.allowed) {

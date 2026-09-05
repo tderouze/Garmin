@@ -10,13 +10,19 @@ try {
 
 export default defineConfig({
   test: {
-    environment: "jsdom",
+    environment: "node",
     globals: true,
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    server: {
+      deps: {
+        inline: [/garmin-connect/],
+      },
+    },
   },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
+      crypto: "node:crypto",
     },
   },
 });

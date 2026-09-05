@@ -104,6 +104,9 @@ export default function DashboardPage() {
         <a href="/import" className="rounded-md border bg-white px-4 py-2 font-medium hover:bg-zinc-50">
           Importer FIT/GPX
         </a>
+        <a href="/settings" className="rounded-md border bg-white px-4 py-2 font-medium hover:bg-zinc-50">
+          ⚙️ Connecter Garmin
+        </a>
       </nav>
     </main>
   );
