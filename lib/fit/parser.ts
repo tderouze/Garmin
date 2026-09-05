@@ -1,3 +1,5 @@
+// @ts-ignore - gpx-parser-builder has no types
+import GPX from "gpx-parser-builder";
 import { computeAvgPace } from "./normalize";
 
 export interface ParsedTrackPoint {
@@ -66,16 +68,10 @@ export function parseGPX(xml: string): ParsedActivity {
     throw new Error("Invalid GPX: missing <gpx> root");
   }
 
-  // Use gpx-parser-builder if available, with fallback manual regex
+  // Try public API first (gpx-parser-builder), fallback to manual regex
   let gpxObj: any;
   try {
-    // dynamic require via import — gpx-parser-builder is ESM
-    // We do sync fallback parsing without needing the lib for test purposes,
-    // but try to use it if it loads.
-    const GPX = require("gpx-parser-builder/src/gpx.js")?.default;
-    if (GPX) {
-      gpxObj = GPX.parse(xml);
-    }
+    gpxObj = GPX.parse(xml);
   } catch {
     // ignore, fallback below
   }
@@ -89,8 +85,6 @@ export function parseGPX(xml: string): ParsedActivity {
     for (const trk of gpxObj.trk) {
       for (const seg of trk.trkseg ?? []) {
         for (const pt of seg.trkpt ?? []) {
-          const lat = parseFloat(pt.$?.lat ?? pt.$?.lat);
-          const lon = parseFloat(pt.$?.lon ?? pt.$?.lon);
           // gpx-parser-builder stores lat/lon in $ or directly
           const latVal = pt.$?.lat ?? pt.lat ?? pt["$"]?.lat;
           const lonVal = pt.$?.lon ?? pt.lon ?? pt["$"]?.lon;
