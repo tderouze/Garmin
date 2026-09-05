@@ -98,18 +98,60 @@ export function movingAverage(values: (number | null | undefined)[], window: num
   return out;
 }
 
+function haversineDistanceM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 /**
  * Normalize by distance: map track points to [0..1] progress ratio by cumulative distance.
  * Caller can then plot all activities on same 0-100% x-axis.
+ * Preference: distanceM if present and total > 0; otherwise haversine cumulative from lat/lng;
+ * fallback to linear index if no geo available.
  */
 export function normalizeByDistance(
   points: { distanceM?: number; lat?: number; lng?: number }[]
 ): number[] {
   if (!points || points.length === 0) return [];
-  // If points already carry distanceM, use last; otherwise assume linear index
-  const total = (points[points.length - 1] as any)?.distanceM as number | undefined;
-  if (total != null && isFinite(total) && total > 0) {
-    return points.map((p) => ((p as any).distanceM ?? 0) / total);
+  if (points.length === 1) return [0];
+  const lastDist = (points[points.length - 1] as { distanceM?: unknown })?.distanceM as number | undefined;
+  if (lastDist != null && typeof lastDist === "number" && isFinite(lastDist) && lastDist > 0) {
+    return points.map((p) => {
+      const d = (p as { distanceM?: unknown }).distanceM as number | undefined;
+      const v = typeof d === "number" && isFinite(d) ? d : 0;
+      return v / (lastDist as number);
+    });
+  }
+  // try haversine cumulative if lat/lng are present on at least some points
+  const hasLatLng = points.some((p) => typeof p.lat === "number" && typeof p.lng === "number" && isFinite(p.lat) && isFinite(p.lng));
+  if (hasLatLng) {
+    const cumul: number[] = [0];
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      if (
+        typeof a.lat === "number" &&
+        typeof a.lng === "number" &&
+        typeof b.lat === "number" &&
+        typeof b.lng === "number" &&
+        isFinite(a.lat) &&
+        isFinite(a.lng) &&
+        isFinite(b.lat) &&
+        isFinite(b.lng)
+      ) {
+        total += haversineDistanceM(a.lat, a.lng, b.lat, b.lng);
+      }
+      cumul.push(total);
+    }
+    if (total > 0) return cumul.map((c) => c / total);
   }
   return points.map((_, i) => (points.length > 1 ? i / (points.length - 1) : 0));
 }

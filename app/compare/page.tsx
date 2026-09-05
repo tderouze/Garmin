@@ -167,17 +167,19 @@ export default function ComparePage() {
               }>;
             };
             const color = PALETTE[idx % PALETTE.length];
-            const points = (act.trackPoints ?? []).map((tp) => ({
+            const points: ActivityWithPoints["trackPoints"] = (act.trackPoints ?? []).map((tp) => ({
               lat: tp.lat,
               lng: tp.lng,
               ele: tp.ele,
+              elevation: (tp as { ele?: number | null }).ele ?? null,
+              distanceM: (tp as { distanceM?: number }).distanceM,
               time: tp.time,
               hr: tp.hr,
               cadence: tp.cadence,
               power: tp.power,
               speed: tp.speed,
             }));
-            return { id: act.id, name: (act as any).name ?? id.slice(0, 8), trackPoints: points, color } as ActivityWithPoints;
+            return { id: act.id, name: act.name ?? id.slice(0, 8), trackPoints: points, color } satisfies ActivityWithPoints;
           })
         );
         if (!cancelled) setTraces(results);
@@ -203,28 +205,30 @@ export default function ComparePage() {
     return activities.slice(0, 20);
   }, [activities, selected]);
 
-  // Best highlights for tableau récap
+  // Best highlights for tableau récap — all metrics covered
   const bestIds = useMemo(() => {
     if (recapActivities.length === 0) return {} as Record<string, string>;
     const best: Record<string, string> = {};
-    // fastest pace = smallest avgPace
     let bestPace: ActivitySummary | null = null;
     let bestDist: ActivitySummary | null = null;
     let bestHR: ActivitySummary | null = null;
     let bestPower: ActivitySummary | null = null;
     let bestEle: ActivitySummary | null = null;
+    let bestCad: ActivitySummary | null = null;
     for (const a of recapActivities) {
       if (a.avgPace != null && (bestPace == null || (a.avgPace as number) < (bestPace.avgPace as number))) bestPace = a;
       if (bestDist == null || a.distance > bestDist.distance) bestDist = a;
       if (a.avgHR != null && (bestHR == null || (a.avgHR as number) > (bestHR.avgHR as number))) bestHR = a;
       if (a.avgPower != null && (bestPower == null || (a.avgPower as number) > (bestPower.avgPower as number))) bestPower = a;
       if (a.elevationGain != null && (bestEle == null || (a.elevationGain as number) > (bestEle.elevationGain as number))) bestEle = a;
+      if (a.avgCadence != null && (bestCad == null || (a.avgCadence as number) > (bestCad.avgCadence as number))) bestCad = a;
     }
     if (bestPace) best["pace"] = bestPace.id;
     if (bestDist) best["distance"] = bestDist.id;
     if (bestHR) best["hr"] = bestHR.id;
     if (bestPower) best["power"] = bestPower.id;
     if (bestEle) best["ele"] = bestEle.id;
+    if (bestCad) best["cadence"] = bestCad.id;
     return best;
   }, [recapActivities]);
 
@@ -267,7 +271,10 @@ export default function ComparePage() {
   }, [activities]);
 
   // Volume hebdo option
-  const weeklyData = useMemo(() => weeklyVolume(activities as any), [activities]);
+  const weeklyData = useMemo(
+    () => weeklyVolume(activities.map((a) => ({ date: a.date, distance: a.distance }))),
+    [activities]
+  );
   const volumeOption = useMemo<EChartsOption | null>(() => {
     if (!weeklyData.length) return null;
     return {
@@ -302,7 +309,10 @@ export default function ComparePage() {
     } as EChartsOption;
   }, [weeklyData]);
 
-  const vma = useMemo(() => estimateVMA(activities as any), [activities]);
+  const vma = useMemo(
+    () => estimateVMA(activities.map((a) => ({ distance: a.distance, duration: a.duration }))),
+    [activities]
+  );
 
   const selectedSet = new Set(selected);
 
@@ -552,6 +562,9 @@ export default function ComparePage() {
                     .map((a) => {
                       const isBestPace = bestIds["pace"] === a.id;
                       const isBestDist = bestIds["distance"] === a.id;
+                      const isBestHR = bestIds["hr"] === a.id;
+                      const isBestCad = bestIds["cadence"] === a.id;
+                      const isBestEle = bestIds["ele"] === a.id;
                       return (
                         <tr key={a.id} className="hover:bg-zinc-50">
                           <td className="py-2 pr-2 font-medium text-zinc-900">{a.name ?? a.id.slice(0, 8)}</td>
@@ -559,11 +572,11 @@ export default function ComparePage() {
                           <td className={`py-2 pr-2 ${isBestDist ? "bg-emerald-50 font-semibold text-emerald-700" : "text-zinc-700"}`}>{formatDistance(a.distance)}</td>
                           <td className="py-2 pr-2 text-zinc-700">{formatDuration(a.duration)}</td>
                           <td className={`py-2 pr-2 ${isBestPace ? "bg-emerald-50 font-semibold text-emerald-700" : "text-zinc-700"}`}>{formatPace(a.avgPace)}</td>
-                          <td className="py-2 pr-2 text-zinc-700">
+                          <td className={`py-2 pr-2 ${isBestHR ? "bg-emerald-50 font-semibold text-emerald-700" : "text-zinc-700"}`}>
                             {a.avgHR != null ? `${a.avgHR} bpm` : "—"} {a.maxHR != null ? `/ ${a.maxHR}` : ""}
                           </td>
-                          <td className="py-2 pr-2 text-zinc-700">{a.avgCadence != null ? `${Math.round(a.avgCadence as number)} spm` : "—"}</td>
-                          <td className="py-2 pr-2 text-zinc-700">{a.elevationGain != null ? `${Math.round(a.elevationGain as number)} m` : "—"}</td>
+                          <td className={`py-2 pr-2 ${isBestCad ? "bg-emerald-50 font-semibold text-emerald-700" : "text-zinc-700"}`}>{a.avgCadence != null ? `${Math.round(a.avgCadence as number)} spm` : "—"}</td>
+                          <td className={`py-2 pr-2 ${isBestEle ? "bg-emerald-50 font-semibold text-emerald-700" : "text-zinc-700"}`}>{a.elevationGain != null ? `${Math.round(a.elevationGain as number)} m` : "—"}</td>
                           <td className="py-2 pr-2 text-zinc-700">
                             {a.calories != null ? `${a.calories}` : "—"} {a.tss != null ? `/ ${Math.round(a.tss as number)}` : ""}
                           </td>

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
-import { movingAverage } from "@/lib/calculations";
+import * as echarts from "echarts";
+import { movingAverage, normalizeByDistance } from "@/lib/calculations";
 
 export type CompareMetric = "pace" | "hr" | "cadence" | "power" | "elevation";
 
@@ -87,8 +88,25 @@ export function CompareCharts({
   metric,
   smoothWindow = 1,
   connectGroup = "compare",
-  normalizeByDistance = false,
+  normalizeByDistance: normalizeByDistanceProp = false,
 }: CompareChartsProps) {
+  // echarts.connect syncs crosshair/tooltip across all charts sharing the same group
+  useEffect(() => {
+    if (!connectGroup) return;
+    try {
+      echarts.connect(connectGroup);
+    } catch {
+      // noop in SSR / missing echarts
+    }
+    return () => {
+      try {
+        echarts.disconnect(connectGroup);
+      } catch {
+        // noop
+      }
+    };
+  }, [connectGroup]);
+
   const { option, hasData } = useMemo(() => {
     if (!activities || activities.length === 0) {
       return { option: null as EChartsOption | null, hasData: false };
@@ -99,7 +117,7 @@ export function CompareCharts({
 
     // Determine max length for x axis if not normalizing
     const maxLen = Math.max(...activities.map((a) => a.trackPoints?.length ?? 0), 0);
-    const xIsPercent = normalizeByDistance;
+    const xIsPercent = normalizeByDistanceProp;
 
     for (let idx = 0; idx < activities.length; idx++) {
       const act = activities[idx];
@@ -111,12 +129,13 @@ export function CompareCharts({
 
       const smoothed = smoothWindow > 1 ? movingAverage(raw, smoothWindow) : raw;
 
-      // Build data as [x, y] pairs so x can be percent or index
+      // Build data as [x, y] pairs so x can be percent or index — use real distance ratio when normalizing
       let data: (number | null)[] | [number, number | null][];
 
       if (xIsPercent) {
+        const ratios = normalizeByDistance(pts);
         data = pts.map((_, i) => {
-          const x = pts.length > 1 ? (i / (pts.length - 1)) * 100 : 0;
+          const x = (ratios[i] ?? 0) * 100;
           const y = smoothed[i];
           return [Number(x.toFixed(2)), y] as [number, number | null];
         });
@@ -126,10 +145,10 @@ export function CompareCharts({
         data = smoothed as (number | null)[];
       }
 
-      const color = (act as any).color ?? PALETTE[idx % PALETTE.length];
+      const color = act.color ?? PALETTE[idx % PALETTE.length];
 
       series.push({
-        name: (act.name as string) ?? act.id.slice(0, 8),
+        name: act.name ?? act.id.slice(0, 8),
         type: "line",
         smooth: smoothWindow > 1 ? true : false,
         showSymbol: false,
@@ -182,6 +201,9 @@ export function CompareCharts({
     const opt: EChartsOption = {
       // @ts-ignore group is not in EChartsOption type but supported by echarts
       group: connectGroup,
+      // axisPointer.link syncs crosshair across charts in same group
+      // @ts-ignore axisPointer is valid at top-level for linking
+      axisPointer: { link: [{ xAxisIndex: "all" }] } as unknown as EChartsOption["axisPointer"],
       tooltip: {
         trigger: "axis",
         axisPointer: { type: "cross", label: { backgroundColor: "#71717a" } },
@@ -226,7 +248,7 @@ export function CompareCharts({
     };
 
     return { option: opt, hasData: anyValue };
-  }, [activities, metric, smoothWindow, connectGroup, normalizeByDistance]);
+  }, [activities, metric, smoothWindow, connectGroup, normalizeByDistanceProp]);
 
   if (!activities || activities.length === 0) {
     return (
