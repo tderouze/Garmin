@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String           @id @default(cuid())
+  email                   String           @unique
+  encryptedGarminTokens   String?
+  lastSyncAt              DateTime?
+  createdAt               DateTime         @default(now())
+  activities              Activity[]
+  personalRecords         PersonalRecord[]
+}
+
+model Activity {
+  id             String          @id @default(cuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id])
+  garminId       String?         @unique
+  type           String
+  name           String?
+  date           DateTime
+  distance       Float
+  duration       Int
+  elevationGain  Float?
+  avgPace        Float?
+  avgHR          Int?
+  maxHR          Int?
+  avgCadence     Float?
+  avgPower       Float?
+  calories       Int?
+  hasGps         Boolean         @default(true)
+  fileUrl        String?
+  trackPoints     TrackPoint[]
+  laps            Lap[]
+  segmentEfforts  SegmentEffort[]
+  personalRecords PersonalRecord[]
+
+  @@index([userId, date])
+  @@index([userId, type])
+}
+
+model TrackPoint {
+  id         String   @id @default(cuid())
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  lat        Float
+  lng        Float
+  ele        Float?
+  time       DateTime
+  hr         Int?
+  cadence    Int?
+  power      Float?
+  speed      Float?
+
+  @@index([activityId, time])
+}
+
+model Lap {
+  id         String   @id @default(cuid())
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  idx        Int
+  distance   Float
+  duration   Int
+  avgPace    Float?
+  avgHR      Int?
+}
+
+model Segment {
+  id             String          @id @default(cuid())
+  name           String
+  polyline       String
+  startLat       Float
+  startLng       Float
+  endLat         Float
+  endLng         Float
+  segmentEfforts SegmentEffort[]
+}
+
+model SegmentEffort {
+  id         String   @id @default(cuid())
+  segmentId  String
+  segment    Segment  @relation(fields: [segmentId], references: [id])
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  duration   Int
+  date       DateTime
+
+  @@unique([segmentId, activityId])
+}
+
+model PersonalRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  distance   String
+  bestTime   Int
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id])
+  date       DateTime
+
+  @@unique([userId, distance])
+}
+
+model SyncError {
+  id        String   @id @default(cuid())
+  userId    String
+  garminId  String?
+  message   String
+  createdAt DateTime @default(now())
+}
