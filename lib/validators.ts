@@ -1,9 +1,19 @@
 import { z } from 'zod';
 
-export const garminConnectSchema = z.object({
+export const garminConnectSchema = z
+  .object({
+    email: z.string().email(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+    tokenB64: z.string().min(10).optional(),
+  })
+  .refine((d) => (d.username && d.password) || d.tokenB64, {
+    message: "Provide either username+password or tokenB64",
+  });
+
+export const garminTokenSchema = z.object({
   email: z.string().email(),
-  username: z.string().min(1),
-  password: z.string().min(1),
+  tokenB64: z.string().min(10),
 });
 
 export const syncBackfillSchema = z.object({

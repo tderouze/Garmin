@@ -99,6 +99,26 @@ Schéma : `prisma/schema.prisma` — 8 modèles (`User`, `Activity`, `TrackPoint
 
 > **LXC Proxmox** (`192.168.1.41` / `db.derouze.ovh`) déjà supporté : mets `DATABASE_URL="postgresql://garmin:***@192.168.1.41:5432/garmin?schema=public"` (local) ou `db.derouze.ovh` (prod via port-forward/VPN) — voir `.env.example:1`. Le LXC doit avoir `listen_addresses='*'` + `pg_hba.conf` `host all all 192.168.1.0/24 scram-sha-256`.
 
+## Contourner le 429 Garmin (login SSO bloqué depuis 2026)
+
+Garmin a durci le SSO programmatic → `429` même en `10/batch + 2000ms` ([garth #217](https://github.com/matin/garth/issues/217)). La parade éprouvée est le **login via vrai navigateur** (Playwright) qui capture un ticket `ST-…` puis l'échange en `oauth1/oauth2` — bypass complet du SSO bloqué ([gist coleman8er](https://gist.github.com/coleman8er/5c8e192d2aa3c8a3a6220c5702e8a5e6), inspiré de `garth`).
+
+**Dans ce projet :**
+
+```bash
+# 1 fois :
+npx playwright install chromium
+npm run garmin:auth
+# → navigateur s'ouvre sur https://sso.garmin.com/sso/embed
+# → connecte-toi à Garmin, le script attrape ticket ST-…, échange en oauth1/oauth2,
+# → vérifie sur /userprofile-service/socialProfile, sauve dans ~/.garth/ + affiche GARMIN_TOKEN_B64
+```
+
+Puis dans l'app `/settings` → section verte **Alternative : login via vrai navigateur** → colle le `GARMIN_TOKEN_B64` (bundle base64 `{oauth1,oauth2}`) + ton `Email local` → `Se connecter via token navigateur` → `POST /api/garmin/connect {tokenB64}` (plus de `username/password`, plus de SSO programmatic).
+
+Le script `scripts/garmin-browser-auth.mjs` est le port Node du `garmin-browser-auth.py` du gist (consumer S3 `thegarth.../oauth_consumer.json`, `OAuth1Session` → `oauth-1.0a`, `ANDROID_UA`, `preauthorized?ticket=…` → `exchange/user/2.0`).
+
+
 Migrations :
 
 ```bash

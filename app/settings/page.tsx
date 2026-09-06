@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [tokenB64, setTokenB64] = useState("");
 
   // Try to load existing user from localStorage
   useEffect(() => {
@@ -48,6 +49,38 @@ export default function SettingsPage() {
       localStorage.setItem("garmin_email", email);
       setStatus(`Connecté — userId ${id.slice(0, 8)}… Tokens chiffrés en DB.`);
       setPassword("");
+    } catch (err: any) {
+      setError(err.message ?? String(err));
+      setStatus(null);
+    }
+  }
+
+  async function handleTokenConnect(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email) {
+      setError("Renseigne d'abord ton Email local");
+      return;
+    }
+    if (!tokenB64.trim()) {
+      setError("Colle le GARMIN_TOKEN_B64");
+      return;
+    }
+    setStatus("Connexion via browser token…");
+    setError(null);
+    try {
+      const res = await fetch("/api/garmin/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, tokenB64: tokenB64.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? `Erreur ${res.status}`);
+      const id = body.userId as string;
+      setUserId(id);
+      localStorage.setItem("garmin_userId", id);
+      localStorage.setItem("garmin_email", email);
+      setStatus(`Connecté via browser — userId ${id.slice(0, 8)}… (bypass 429)`);
+      setTokenB64("");
     } catch (err: any) {
       setError(err.message ?? String(err));
       setStatus(null);
@@ -150,6 +183,37 @@ export default function SettingsPage() {
         </div>
         <button type="submit" className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-black">
           Se connecter à Garmin
+        </button>
+      </form>
+
+      <form onSubmit={handleTokenConnect} className="mt-6 space-y-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-6 shadow-sm">
+        <h2 className="font-semibold text-emerald-900">Alternative : login via vrai navigateur (bypass 429)</h2>
+        <p className="text-xs text-emerald-800">
+          Si le login classique donne <span className="font-mono">429</span> (SSO bloqué depuis mars 2026), utilise le script browser :
+          <br />
+          <code className="rounded bg-white px-1 py-0.5">npx playwright install chromium</code> (1 fois) puis{" "}
+          <code className="rounded bg-white px-1 py-0.5">npm run garmin:auth</code> — un navigateur s'ouvre, connecte-toi à Garmin, le script
+          capture le ticket <span className="font-mono">ST-…</span> et échange en <span className="font-mono">oauth1/oauth2</span> (
+          <a href="https://gist.github.com/coleman8er/5c8e192d2aa3c8a3a6220c5702e8a5e6" target="_blank" className="underline">
+            gist coleman8er
+          </a>
+          ). Copie le <span className="font-mono">GARMIN_TOKEN_B64</span> affiché et colle-le ici.
+        </p>
+        <div>
+          <label className="text-sm font-medium">GARMIN_TOKEN_B64</label>
+          <textarea
+            value={tokenB64}
+            onChange={(e) => setTokenB64(e.target.value)}
+            placeholder="eyJvYXV0aDEiOnsib2F1dGhfdG9rZW4iOiJ... (base64 du bundle {oauth1,oauth2})"
+            rows={3}
+            className="mt-1 w-full rounded-md border px-3 py-2 font-mono text-xs"
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            Généré par <code>scripts/garmin-browser-auth.mjs</code> — aussi sauvegardé dans <code>~/.garth/</code>
+          </p>
+        </div>
+        <button type="submit" className="w-full rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800">
+          Se connecter via token navigateur
         </button>
       </form>
 

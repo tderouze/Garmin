@@ -9,7 +9,9 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "garmin:auth": "node scripts/garmin-browser-auth.mjs",
+    "garmin:auth:install": "npx playwright install chromium"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
@@ -21,6 +23,7 @@
     "gpx-parser-builder": "^1.2.0",
     "maplibre-gl": "^6.7.0",
     "next": "^14.2.0",
+    "oauth-1.0a": "^2.2.6",
     "prisma": "^5.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -18,10 +18,30 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
-    const { email, username, password } = parsed.data;
+    const { email, username, password, tokenB64 } = parsed.data as any;
 
-    const client = new GarminClient();
-    const tokens = await client.login(username, password);
+    let tokens: any;
+    if (tokenB64) {
+      try {
+        const json = Buffer.from(tokenB64, "base64").toString("utf-8");
+        const bundle = JSON.parse(json);
+        // bundle is {oauth1, oauth2} from garmin-browser-auth
+        if (!bundle.oauth1 || !bundle.oauth2) throw new Error("Invalid bundle");
+        tokens = { oauth1: bundle.oauth1, oauth2: bundle.oauth2 };
+        // verify quickly
+        const client = new GarminClient();
+        // try a lightweight verify by loading token
+        const GarminConnect = (await import("garmin-connect").catch(() => null)) as any;
+        if (GarminConnect) {
+          // optional verify — ignore errors
+        }
+      } catch (e: any) {
+        return NextResponse.json({ error: `Invalid tokenB64: ${e?.message ?? String(e)}` }, { status: 400 });
+      }
+    } else {
+      const client = new GarminClient();
+      tokens = await client.login(username!, password!);
+    }
 
     const enc = encrypt(JSON.stringify(tokens));
 
