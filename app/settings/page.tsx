@@ -61,13 +61,13 @@ export default function SettingsPage() {
     }
     setSyncing(true);
     setError(null);
-    setStatus("Backfill en cours (100 par batch, 500ms entre requêtes)…");
+    setStatus("Backfill en cours (30 par batch, 1000ms + jitter entre requêtes)…");
     setSyncResult(null);
     try {
       const res = await fetch("/api/sync/backfill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, start: 0, limit: 100 }),
+        body: JSON.stringify({ userId, start: 0, limit: 30 }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `Erreur ${res.status}`);
@@ -163,7 +163,7 @@ export default function SettingsPage() {
               disabled={syncing}
               className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
             >
-              {syncing ? "Sync…" : "Backfill 100 (historique)"}
+              {syncing ? "Sync…" : "Backfill 30 (historique)"}
             </button>
             <button
               onClick={handleIncremental}
@@ -174,7 +174,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="mt-3 text-xs text-zinc-500">
-            Backfill : paginé 100/batch, déduplication sur garminId, backoff 429. Clique plusieurs fois pour tout l'historique (start 0 → 100 → 200…).
+            Backfill : paginé 30/batch, 1000ms + jitter entre FIT, backoff 429 avec Retry-After + jitter. Clique plusieurs fois (start 0 → 30 → 60…) ou attends 60s si 429.
           </p>
           {syncResult && (
             <pre className="mt-3 overflow-auto rounded bg-zinc-50 p-3 text-xs">{JSON.stringify(syncResult, null, 2)}</pre>

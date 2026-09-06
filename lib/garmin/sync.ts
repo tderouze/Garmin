@@ -12,6 +12,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function jitter(ms: number): number {
+  // ±20% jitter
+  return ms + Math.floor(Math.random() * 500);
+}
+
+function parseRetryAfterMs(msg: string): number | null {
+  const m = msg.match(/retry-after[:\s]*(\d+)/i);
+  if (m) {
+    const sec = parseInt(m[1], 10);
+    if (!isNaN(sec) && sec > 0 && sec < 600) return sec * 1000;
+  }
+  // Garmin sometimes returns "Retry after 60" without header name
+  const m2 = msg.match(/retry.*?(\d+)\s*s/i);
+  if (m2) {
+    const sec2 = parseInt(m2[1], 10);
+    if (!isNaN(sec2) && sec2 > 0 && sec2 < 600) return sec2 * 1000;
+  }
+  return null;
+}
+
 function extractGarminId(raw: any): string | null {
   const id = raw?.activityId ?? raw?.activity_id ?? raw?.id ?? raw?.garminId ?? raw?.garminID;
   return id != null ? String(id) : null;
@@ -46,7 +66,7 @@ export async function backfillBatch(
 
   const client = new GarminClient();
 
-  // Fetch activities with 429 retry
+  // Fetch activities with 429 retry (conservative: respects Retry-After + jitter)
   let activities: any[] = [];
   let retries = 0;
   while (true) {
@@ -55,9 +75,11 @@ export async function backfillBatch(
       break;
     } catch (e: any) {
       const msg = e?.message ?? String(e);
-      if ((msg.includes("429") || msg.includes("rate")) && retries < 3) {
+      if ((msg.includes("429") || msg.toLowerCase().includes("rate")) && retries < 3) {
         retries++;
-        await sleep(1000 * Math.pow(2, retries));
+        const retryAfter = parseRetryAfterMs(msg);
+        const delay = retryAfter ?? jitter(1000 * Math.pow(2, retries));
+        await sleep(delay);
         continue;
       }
       await prisma.syncError.create({
@@ -97,14 +119,14 @@ export async function backfillBatch(
       continue;
     }
 
-    // Rate-limit 500ms between downloads
-    await sleep(500);
+    // Conservative throttle: 1000ms + jitter between downloads (avoid burst)
+    await sleep(jitter(1000));
 
     try {
       let parsed: any = null;
       let buffer: Buffer | null = null;
 
-      // Attempt to download FIT — 429 backoff inside
+      // Attempt to download FIT — 429 backoff with Retry-After + jitter
       let dlRetries = 0;
       while (true) {
         try {
@@ -112,9 +134,11 @@ export async function backfillBatch(
           break;
         } catch (dlErr: any) {
           const dlMsg = dlErr?.message ?? String(dlErr);
-          if ((dlMsg.includes("429") || dlMsg.includes("rate")) && dlRetries < 2) {
+          if ((dlMsg.includes("429") || dlMsg.toLowerCase().includes("rate")) && dlRetries < 3) {
             dlRetries++;
-            await sleep(2000 * dlRetries);
+            const retryAfter = parseRetryAfterMs(dlMsg);
+            const delay = retryAfter ?? jitter(2000 * Math.pow(2, dlRetries - 1));
+            await sleep(delay);
             continue;
           }
           throw dlErr;

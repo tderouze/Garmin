@@ -75,10 +75,12 @@ export class GarminClient {
       return [];
     } catch (e: any) {
       const msg = e?.message ?? String(e);
-      if (msg.includes("429") || msg.toLowerCase().includes("rate")) {
-        throw new Error("Garmin rate limited — retry after backoff (429)");
+      const retryAfter = (e as any)?.response?.headers?.["retry-after"] ?? (e as any)?.response?.headers?.["Retry-After"];
+      const suffix = retryAfter ? ` retry-after: ${retryAfter}` : "";
+      if (msg.includes("429") || msg.toLowerCase().includes("rate") || retryAfter) {
+        throw new Error(`Garmin rate limited — retry after backoff (429)${suffix}`);
       }
-      throw new Error(`Garmin fetchActivities failed: ${msg}`);
+      throw new Error(`Garmin fetchActivities failed: ${msg}${suffix}`);
     }
   }
 
@@ -95,12 +97,10 @@ export class GarminClient {
       : `https://connectapi.garmin.com/download-service/files/activity/${activityId}`;
     try {
       const client: any = (gc as any).client;
-      // garmin-connect HttpClient uses axios-like get with responseType
       const data = await client.get(url, { responseType: "arraybuffer" });
       if (Buffer.isBuffer(data)) return data;
       if (data instanceof ArrayBuffer) return Buffer.from(data);
       if (typeof data === "string") return Buffer.from(data, "binary");
-      // axios may wrap in {data}
       if (data?.data) {
         const d = data.data;
         if (Buffer.isBuffer(d)) return d;
@@ -108,7 +108,12 @@ export class GarminClient {
       }
       return Buffer.from(data as any);
     } catch (e: any) {
-      throw new Error(`Garmin downloadFIT failed: ${e?.message ?? String(e)}`);
+      const retryAfter = (e as any)?.response?.headers?.["retry-after"] ?? (e as any)?.response?.headers?.["Retry-After"];
+      const suffix = retryAfter ? ` retry-after: ${retryAfter}` : "";
+      if ((e?.message ?? "").includes("429") || String(e).includes("429") || retryAfter) {
+        throw new Error(`Garmin rate limited — retry after backoff (429)${suffix}`);
+      }
+      throw new Error(`Garmin downloadFIT failed: ${e?.message ?? String(e)}${suffix}`);
     }
   }
 
