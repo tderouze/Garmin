@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type ImportResult = {
   activityId: string;
@@ -16,11 +16,32 @@ type RecentItem = {
 
 export default function ImportPage() {
   const [userId, setUserId] = useState("");
+  const [autoUserId, setAutoUserId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<ImportResult | null>(null);
   const [recent, setRecent] = useState<RecentItem[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("garmin_userId");
+    if (saved) {
+      setUserId(saved);
+      setAutoUserId(saved);
+      return;
+    }
+    // fallback: fetch first activity's userId or try /api/activities
+    fetch("/api/activities?limit=1")
+      .then((r) => r.json())
+      .then((data) => {
+        const first = Array.isArray(data) ? data[0] : data?.activities?.[0];
+        if (first?.userId) {
+          setUserId(first.userId);
+          setAutoUserId(first.userId);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const uploadFile = useCallback(
     async (file: File) => {
@@ -94,10 +115,16 @@ export default function ImportPage() {
           id="userId"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          placeholder="cuid de l'utilisateur (requis)"
+          placeholder="cuid — auto-rempli depuis /settings"
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
         />
-        <p className="mt-1 text-xs text-zinc-500">Pour V1 perso l&apos;auth est différée — indique le userId cible (ou crée un user via /api/garmin/connect).</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          {autoUserId ? (
+            <>Auto-détecté depuis <a href="/settings" className="underline">/settings</a> : <span className="font-mono">{autoUserId.slice(0, 8)}…</span> — modifiable si besoin</>
+          ) : (
+            <>Va d'abord sur <a href="/settings" className="underline">/settings</a> → "Se connecter à Garmin" pour créer ton userId, il sera auto-rempli ici.</>
+          )}
+        </p>
       </div>
 
       <div
