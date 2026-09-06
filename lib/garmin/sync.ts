@@ -78,7 +78,7 @@ export async function backfillBatch(
       if ((msg.includes("429") || msg.toLowerCase().includes("rate")) && retries < 3) {
         retries++;
         const retryAfter = parseRetryAfterMs(msg);
-        const delay = retryAfter ?? jitter(1000 * Math.pow(2, retries));
+        const delay = retryAfter ?? jitter(2000 * Math.pow(2, retries));
         await sleep(delay);
         continue;
       }
@@ -119,8 +119,8 @@ export async function backfillBatch(
       continue;
     }
 
-    // Conservative throttle: 1000ms + jitter between downloads (avoid burst)
-    await sleep(jitter(1000));
+    // Ultra-conservative throttle: 2000ms + jitter between downloads (avoid Garmin 429)
+    await sleep(jitter(2000));
 
     try {
       let parsed: any = null;

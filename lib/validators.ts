@@ -9,7 +9,7 @@ export const garminConnectSchema = z.object({
 export const syncBackfillSchema = z.object({
   userId: z.string().cuid(),
   start: z.number().int().min(0).default(0),
-  limit: z.number().int().min(1).max(50).default(30),
+  limit: z.number().int().min(1).max(20).default(10),
 });
 
 export const syncIncrementalSchema = z.object({

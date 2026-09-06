@@ -61,13 +61,13 @@ export default function SettingsPage() {
     }
     setSyncing(true);
     setError(null);
-    setStatus("Backfill en cours (30 par batch, 1000ms + jitter entre requêtes)…");
+    setStatus("Backfill en cours (10 par batch, 2000ms + jitter entre requêtes)…");
     setSyncResult(null);
     try {
       const res = await fetch("/api/sync/backfill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, start: 0, limit: 30 }),
+        body: JSON.stringify({ userId, start: 0, limit: 10 }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `Erreur ${res.status}`);
@@ -163,7 +163,7 @@ export default function SettingsPage() {
               disabled={syncing}
               className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
             >
-              {syncing ? "Sync…" : "Backfill 30 (historique)"}
+              {syncing ? "Sync…" : "Backfill 10 (ultra-lent)"}
             </button>
             <button
               onClick={handleIncremental}
@@ -174,7 +174,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="mt-3 text-xs text-zinc-500">
-            Backfill : paginé 30/batch, 1000ms + jitter entre FIT, backoff 429 avec Retry-After + jitter. Clique plusieurs fois (start 0 → 30 → 60…) ou attends 60s si 429.
+            Backfill : paginé 10/batch, 2000ms + jitter entre FIT, backoff 429 avec Retry-After + jitter. Clique plusieurs fois (start 0 → 10 → 20…) avec 5s entre clics — ou attends 60s si 429.
           </p>
           {syncResult && (
             <pre className="mt-3 overflow-auto rounded bg-zinc-50 p-3 text-xs">{JSON.stringify(syncResult, null, 2)}</pre>
@@ -193,6 +193,9 @@ export default function SettingsPage() {
       <div className="mt-6 rounded-md bg-amber-50 p-4 text-xs text-amber-800">
         <strong>Note :</strong> la lib Garmin est non-officielle. Si Garmin change son SSO, le login peut casser — utilise alors
         l'import manuel via connect.garmin.com → Exporter FIT.
+      </div>
+      <div className="mt-4 text-center text-xs text-zinc-400">
+        v1f97f52+ ultra-lent — 10/batch · 2000ms+jitter · Retry-After — git log pour vérifier
       </div>
     </main>
   );
